@@ -1,0 +1,33 @@
+<?php
+
+namespace App\Http\Resources;
+
+use Illuminate\Http\Request;
+use Illuminate\Http\Resources\Json\JsonResource;
+
+class ReviewResource extends JsonResource
+{
+    /**
+     * Transform the resource into an array.
+     *
+     * @return array<string, mixed>
+     */
+    public function toArray(Request $request): array
+    {
+        return [
+            'id' => $this->id,
+            'rating' => $this->rating,
+            'comment' => $this->comment,
+            'created_at' => $this->created_at->format('Y-m-d'),
+            'user' => [
+                'id' => $this->user->id ?? null,
+                'name' => $this->user->name ?? null,
+                'avatar_url' => $this->user ? ($this->user->avatar_url ?? $this->user->getFirstMediaUrl('avatar')) : null,
+            ],
+            'restaurant' => [
+                'id' => $this->restaurant->id ?? null,
+                'name_en' => $this->restaurant->name_en ?? null,
+            ],
+        ];
+    }
+}
