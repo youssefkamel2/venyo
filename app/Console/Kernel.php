@@ -2,6 +2,10 @@
 
 namespace App\Console;
 
+use App\Jobs\AutoCancelPendingReservationsJob;
+use App\Jobs\CleanupExpiredLocksJob;
+use App\Jobs\SendOwnerReservationRemindersJob;
+use App\Jobs\SendReservationRemindersJob;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Foundation\Console\Kernel as ConsoleKernel;
 
@@ -12,40 +16,34 @@ class Kernel extends ConsoleKernel
      */
     protected function schedule(Schedule $schedule): void
     {
-        // Reservation Reminders (Check every hour)
-        $schedule->call(function () {
-            $reminders = \App\Models\Reservation::where('status', 'accepted')
-                ->where('reservation_date', now()->toDateString())
-                ->whereRaw('ABS(TIMESTAMPDIFF(HOUR, CONCAT(reservation_date, " ", reservation_time), NOW())) = 2')
-                ->get();
+        // Reservation Reminders (Check every hour, dispatched to queue)
+        $schedule->job(new SendReservationRemindersJob())
+            ->hourly()
+            ->name('reservation-reminders')
+            ->withoutOverlapping();
 
-            foreach ($reminders as $reservation) {
-                $reservation->user->notify(new \App\Notifications\ReservationReminder($reservation));
-            }
-        })->hourly();
+        // Owner 1-hour reminders (Check every 5 minutes, dispatched to queue)
+        $schedule->job(new SendOwnerReservationRemindersJob())
+            ->everyFiveMinutes()
+            ->name('owner-reservation-reminders')
+            ->withoutOverlapping();
 
-        // Owner 1-hour reminders (Pusher)
-        $schedule->call(function () {
-            $reminders = \App\Models\Reservation::where('status', 'accepted')
-                ->where('reservation_date', now()->toDateString())
-                ->whereRaw('ABS(TIMESTAMPDIFF(MINUTE, CONCAT(reservation_date, " ", reservation_time), NOW())) <= 65')
-                ->whereRaw('ABS(TIMESTAMPDIFF(MINUTE, CONCAT(reservation_date, " ", reservation_time), NOW())) >= 55')
-                ->get();
+        // Auto-cancel abandoned reservations (Check every hour, dispatched to queue)
+        $schedule->job(new AutoCancelPendingReservationsJob())
+            ->hourly()
+            ->name('auto-cancel-reservations')
+            ->withoutOverlapping();
 
-            foreach ($reminders as $reservation) {
-                $reservation->restaurant->owner->notify(new \App\Notifications\OwnerReservationReminder($reservation));
-            }
-        })->everyFiveMinutes();
+        // Cleanup expired locks (Check every 5 minutes, dispatched to queue)
+        $schedule->job(new CleanupExpiredLocksJob())
+            ->everyFiveMinutes()
+            ->name('cleanup-expired-locks')
+            ->withoutOverlapping();
 
-        // Auto-cancel abandoned reservations
-        $schedule->call(function () {
-            (new \App\Services\ReservationService())->autoCancelPending();
-        })->hourly();
-
-        // Cleanup expired locks
-        $schedule->call(function () {
-            (new \App\Services\ReservationService())->cleanupLocks();
-        })->everyFiveMinutes();
+        // Clean up old activity logs (weekly)
+        $schedule->command('activitylog:clean')
+            ->weekly()
+            ->name('clean-activity-logs');
     }
 
     /**
@@ -53,8 +51,9 @@ class Kernel extends ConsoleKernel
      */
     protected function commands(): void
     {
-        $this->load(__DIR__.'/Commands');
+        $this->load(__DIR__ . '/Commands');
 
         require base_path('routes/console.php');
     }
 }
+

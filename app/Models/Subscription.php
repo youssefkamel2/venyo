@@ -5,9 +5,12 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Spatie\Activitylog\Traits\LogsActivity;
+use Spatie\Activitylog\LogOptions;
 
 class Subscription extends Model
 {
+    use LogsActivity;
     protected $fillable = ['restaurant_id', 'plan_id', 'starts_at', 'expires_at', 'status'];
 
     protected $casts = [
@@ -28,5 +31,14 @@ class Subscription extends Model
     public function invoices(): HasMany
     {
         return $this->hasMany(Invoice::class);
+    }
+
+    public function getActivitylogOptions(): LogOptions
+    {
+        return LogOptions::defaults()
+            ->logOnly(['restaurant_id', 'plan_id', 'starts_at', 'expires_at', 'status'])
+            ->logOnlyDirty()
+            ->dontSubmitEmptyLogs()
+            ->setDescriptionForEvent(fn(string $eventName) => "Subscription has been {$eventName}");
     }
 }

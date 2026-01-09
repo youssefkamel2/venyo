@@ -7,12 +7,14 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Spatie\MediaLibrary\HasMedia;
 use Spatie\MediaLibrary\InteractsWithMedia;
+use Spatie\Activitylog\Traits\LogsActivity;
+use Spatie\Activitylog\LogOptions;
 
 use App\Traits\HasHashedId;
 
 class Restaurant extends Model implements HasMedia
 {
-    use InteractsWithMedia, HasHashedId;
+    use InteractsWithMedia, HasHashedId, LogsActivity;
 
     protected $fillable = [
         'owner_id',
@@ -107,5 +109,57 @@ class Restaurant extends Model implements HasMedia
     public function favorites(): HasMany
     {
         return $this->hasMany(Favorite::class);
+    }
+
+    public function getActivitylogOptions(): LogOptions
+    {
+        return LogOptions::defaults()
+            ->logOnly([
+                'name_en',
+                'name_ar',
+                'description_en',
+                'description_ar',
+                'area_id',
+                'sub_area_id',
+                'restaurant_type_id',
+                'cuisine_type_id',
+                'address',
+                'phone',
+                'opening_time',
+                'closing_time',
+                'is_reservable',
+                'is_promoted',
+                'is_active',
+                'is_profile_complete'
+            ])
+            ->logOnlyDirty()
+            ->dontSubmitEmptyLogs()
+            ->setDescriptionForEvent(fn(string $eventName) => "Restaurant has been {$eventName}");
+    }
+
+    public function registerMediaCollections(): void
+    {
+        $this->addMediaCollection('cover')
+            ->singleFile();
+
+        $this->addMediaCollection('photos');
+
+        $this->addMediaCollection('menu');
+    }
+
+    public function registerMediaConversions(\Spatie\MediaLibrary\MediaCollections\Models\Media $media = null): void
+    {
+        $this->addMediaConversion('thumb')
+            ->width(300)
+            ->height(200)
+            ->sharpen(10);
+
+        $this->addMediaConversion('medium')
+            ->width(800)
+            ->height(600);
+
+        $this->addMediaConversion('large')
+            ->width(1200)
+            ->height(800);
     }
 }

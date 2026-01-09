@@ -5,12 +5,14 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use Spatie\Activitylog\Traits\LogsActivity;
+use Spatie\Activitylog\LogOptions;
 
 use App\Traits\HasHashedId;
 
 class Reservation extends Model
 {
-    use HasHashedId;
+    use HasHashedId, LogsActivity;
     protected $fillable = [
         'user_id',
         'restaurant_id',
@@ -56,5 +58,21 @@ class Reservation extends Model
     public function customerReview(): HasOne
     {
         return $this->hasOne(CustomerReview::class);
+    }
+
+    public function getActivitylogOptions(): LogOptions
+    {
+        return LogOptions::defaults()
+            ->logOnly([
+                'status',
+                'reservation_date',
+                'reservation_time',
+                'guests_count',
+                'occasion',
+                'special_request'
+            ])
+            ->logOnlyDirty()
+            ->dontSubmitEmptyLogs()
+            ->setDescriptionForEvent(fn(string $eventName) => "Reservation has been {$eventName}");
     }
 }
