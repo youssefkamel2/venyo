@@ -3,7 +3,10 @@
 namespace App\Http\Controllers\Api\V1\Customer;
 
 use App\Http\Controllers\Api\V1\BaseController;
+use App\Http\Resources\MenuCategoryResource;
 use App\Http\Resources\ReservationResource;
+use App\Models\MenuItem;
+use App\Models\Reservation;
 use App\Models\Restaurant;
 use App\Models\TimeSlot;
 use App\Services\ReservationService;
@@ -68,7 +71,7 @@ class ReservationController extends BaseController
             return $this->success([
                 'reservation_id' => $reservation->hashed_id,
                 'locked_until' => $reservation->locked_until,
-            ], 'Slot locked successfully for 5 minutes');
+            ], 'Slot locked successfully for 10 minutes');
         } catch (\Exception $e) {
             return $this->error($e->getMessage(), 422);
         }
@@ -83,7 +86,7 @@ class ReservationController extends BaseController
      */
     public function show(Request $request, string $id): JsonResponse
     {
-        $decodedId = \App\Models\Reservation::decodeId($id) ?? (is_numeric($id) ? (int) $id : null);
+        $decodedId = Reservation::decodeId($id) ?? (is_numeric($id) ? (int) $id : null);
 
         $reservation = $request->user()->reservations()
             ->with(['restaurant', 'timeSlot'])
@@ -107,7 +110,7 @@ class ReservationController extends BaseController
     public function store(Request $request): JsonResponse
     {
         $rawResId = $request->input('reservation_id');
-        $reservationId = \App\Models\Reservation::decodeId($rawResId) ?? (is_numeric($rawResId) ? (int) $rawResId : null);
+        $reservationId = Reservation::decodeId($rawResId) ?? (is_numeric($rawResId) ? (int) $rawResId : null);
 
         $validator = Validator::make(array_merge($request->all(), [
             'reservation_id' => $reservationId,
@@ -115,6 +118,7 @@ class ReservationController extends BaseController
             'reservation_id' => 'required|exists:reservations,id',
             'occasion' => 'nullable|string|max:255',
             'special_request' => 'nullable|string|max:1000',
+            'dietary_preferences' => 'nullable|string|max:1000',
             'subscribe_newsletter' => 'boolean',
         ]);
 
@@ -133,6 +137,7 @@ class ReservationController extends BaseController
         $reservation = $this->reservationService->completeReservation($reservationId, [
             'occasion' => $request->input('occasion'),
             'special_request' => $request->input('special_request'),
+            'dietary_preferences' => $request->input('dietary_preferences'),
             'subscribe_newsletter' => $request->input('subscribe_newsletter', false),
         ]);
 
@@ -143,7 +148,11 @@ class ReservationController extends BaseController
         // Notify Restaurant Owner
         $reservation->restaurant->owner->notify(new \App\Notifications\ReservationCreated($reservation));
 
-        return $this->success(new ReservationResource($reservation->load(['restaurant', 'timeSlot'])), 'Reservation submitted successfully and is pending approval.');
+        $message = $reservation->status === 'accepted'
+            ? 'Reservation confirmed successfully!'
+            : 'Reservation submitted successfully and is pending approval.';
+
+        return $this->success(new ReservationResource($reservation->load(['restaurant', 'timeSlot'])), $message);
     }
 
     public function index(Request $request): JsonResponse
@@ -161,18 +170,15 @@ class ReservationController extends BaseController
             })
             ->orderBy('reservation_date', 'desc')
             ->orderBy('reservation_time', 'desc')
-            ->paginate($request->get('limit', 15));
+            ->paginate($request->get('limit', 15))
+            ->through(fn($reservation) => new ReservationResource($reservation));
 
-        return $this->paginate(
-            $reservations->setCollection(
-                collect(ReservationResource::collection($reservations->getCollection()))
-            ),
-        );
+        return $this->paginate($reservations);
     }
 
     public function cancel(Request $request, string $id): JsonResponse
     {
-        $decodedId = \App\Models\Reservation::decodeId($id) ?? (is_numeric($id) ? (int) $id : null);
+        $decodedId = Reservation::decodeId($id) ?? (is_numeric($id) ? (int) $id : null);
         $cancelled = $this->reservationService->cancel($request->user()->id, $decodedId);
 
         if (!$cancelled) {
@@ -180,5 +186,96 @@ class ReservationController extends BaseController
         }
 
         return $this->success(null, 'Reservation cancelled successfully');
+    }
+
+    public function getMenu(Request $request, string $id): JsonResponse
+    {
+        $decodedId = Reservation::decodeId($id) ?? (is_numeric($id) ? (int) $id : null);
+        $reservation = $request->user()->reservations()
+            ->with('restaurant')
+            ->where('id', $decodedId)
+            ->first();
+
+        $reservation = $request->user()->reservations()->findOrFail($decodedId);
+
+        // Security: Only allow menu browsing for the owner (handled by findOrFail on relationship)
+        // We removed the status check here to allow browsing for pending/hold reservations, etc.
+
+        $categories = $reservation->restaurant->menuCategories()
+            ->with([
+                'menuItems' => function ($query) {
+                    $query->where('is_available', true);
+                }
+            ])
+            ->orderBy('sort_order', 'asc')
+            ->get();
+
+        return $this->success(MenuCategoryResource::collection($categories), 'Menu retrieved.');
+    }
+
+    public function submitPreOrder(Request $request, string $id): JsonResponse
+    {
+        $decodedId = Reservation::decodeId($id) ?? (is_numeric($id) ? (int) $id : null);
+        $reservation = $request->user()->reservations()
+            ->where('id', $decodedId)
+            ->first();
+
+        if (!$reservation) {
+            return $this->error('Reservation not found.', 404);
+        }
+
+        // Security: Only allow pre-order submission for accepted reservations
+        if ($reservation->status !== 'accepted') {
+            return $this->error("Pre-orders can only be submitted for confirmed reservations. Current status: {$reservation->status}.", 403);
+        }
+
+        $validator = Validator::make($request->all(), [
+            'items' => 'required|array|min:1',
+            'items.*.menu_item_id' => 'required',
+            'items.*.quantity' => 'required|integer|min:1',
+        ]);
+
+        if ($validator->fails()) {
+            return $this->validationError($validator->errors());
+        }
+
+        // Calculate total and create a new Order
+        $total = 0;
+        $itemsData = [];
+
+        foreach ($request->input('items') as $item) {
+            $rawMenuItemId = $item['menu_item_id'];
+            $menuItemId = MenuItem::decodeId($rawMenuItemId) ?? (is_numeric($rawMenuItemId) ? (int) $rawMenuItemId : null);
+
+            $menuItem = MenuItem::find($menuItemId);
+            if (!$menuItem)
+                continue;
+
+            $itemsData[] = [
+                'menu_item_id' => $menuItem->id,
+                'quantity' => $item['quantity'],
+                'price' => $menuItem->price,
+            ];
+            $total += ($menuItem->price * $item['quantity']);
+        }
+
+        if (empty($itemsData)) {
+            return $this->error('No valid menu items provided.', 422);
+        }
+
+        // Create the Order
+        $order = $reservation->orders()->create([
+            'total' => $total,
+        ]);
+
+        // Create all items under this order
+        foreach ($itemsData as $data) {
+            $order->items()->create($data);
+        }
+
+        return $this->success([
+            'order_id' => $order->hashed_id,
+            'total' => $total,
+        ], 'Pre-order submitted successfully.');
     }
 }

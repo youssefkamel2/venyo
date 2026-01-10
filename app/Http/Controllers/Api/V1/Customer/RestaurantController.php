@@ -49,10 +49,11 @@ class RestaurantController extends BaseController
                     $query->where('is_promoted', $value);
                 }),
             ])
-            ->allowedSorts(['created_at'])
+            ->allowedSorts(['created_at', 'rating', 'is_promoted', 'is_featured'])
+            ->defaultSort('-is_featured', '-is_promoted', '-rating')
             ->where('is_active', true)
             ->where('is_profile_complete', true)
-            ->with(['area', 'subArea', 'type', 'cuisine', 'media', 'reviews.user'])
+            ->with(['area', 'subArea', 'type', 'cuisine', 'photos', 'reviews.user'])
             ->when(auth('sanctum')->check(), function ($query) {
                 $query->withExists([
                     'favorites' => function ($query) {
@@ -60,14 +61,10 @@ class RestaurantController extends BaseController
                     }
                 ]);
             })
-            ->paginate($request->get('limit', 15));
+            ->paginate($request->get('limit', 15))
+            ->through(fn($restaurant) => new RestaurantResource($restaurant));
 
-        return $this->paginate(
-            $restaurants->setCollection(
-                collect(RestaurantResource::collection($restaurants->getCollection()))
-            ),
-            'Restaurants retrieved successfully'
-        );
+        return $this->paginate($restaurants, 'Restaurants retrieved successfully');
     }
 
     /**
@@ -85,7 +82,7 @@ class RestaurantController extends BaseController
                 'subArea',
                 'type',
                 'cuisine',
-                'media',
+                'photos',
                 'reviews.user',
                 'slots' => function ($query) {
                     $query->where('is_active', true);
@@ -117,7 +114,7 @@ class RestaurantController extends BaseController
         $restaurants = Restaurant::where('is_promoted', true)
             ->where('is_active', true)
             ->where('is_profile_complete', true)
-            ->with(['area', 'subArea', 'type', 'cuisine', 'media', 'reviews.user'])
+            ->with(['area', 'subArea', 'type', 'cuisine', 'photos', 'reviews.user'])
             ->when(auth('sanctum')->check(), function ($query) {
                 $query->withExists([
                     'favorites' => function ($query) {

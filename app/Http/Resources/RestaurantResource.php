@@ -14,13 +14,9 @@ class RestaurantResource extends JsonResource
      */
     public function toArray(Request $request): array
     {
-        // Use pre-loaded data to avoid N+1 queries
         $reviews = $this->relationLoaded('reviews')
             ? $this->reviews->where('is_visible', true)
             : collect();
-
-        $avgRating = $reviews->isNotEmpty() ? $reviews->avg('rating') : null;
-        $reviewsCount = $reviews->count();
 
         return [
             'id' => $this->hashed_id,
@@ -37,22 +33,22 @@ class RestaurantResource extends JsonResource
             'closing_time' => $this->closing_time,
             'is_reservable' => $this->is_reservable,
             'is_promoted' => $this->is_promoted,
-            'rating' => $avgRating ? round($avgRating, 1) : 0,
-            'reviews_count' => $reviewsCount,
-            // Use cached media from eager loading
-            'cover_photo_url' => $this->relationLoaded('media') && $this->media->isNotEmpty()
-                ? $this->media->first()->getUrl()
-                : null,
-            'photos' => $this->relationLoaded('media')
-                ? $this->media->map(fn($m) => [
-                    'id' => app(\App\Services\HashidService::class)->encode($m->id),
-                    'url' => $m->getUrl(),
+            'is_featured' => $this->is_featured,
+            'auto_accept' => $this->auto_accept,
+            'seating_options' => $this->seating_options,
+            'rating' => (float) $this->rating,
+            'reviews_count' => (int) $this->reviews_count,
+            'cover_photo_url' => $this->cover_photo_url,
+            'photos' => $this->relationLoaded('photos')
+                ? $this->photos->map(fn($photo) => [
+                    'id' => app(\App\Services\HashidService::class)->encode($photo->id),
+                    'url' => $photo->url,
                 ])
                 : [],
             'reviews' => $reviews->take(5)->map(fn($review) => [
                 'id' => $review->hashed_id,
                 'user_name' => $review->user->name ?? 'Guest',
-                'user_avatar' => $review->user?->getFirstMediaUrl('avatar'),
+                'user_avatar' => $review->user?->avatar_url,
                 'rating' => $review->rating,
                 'comment' => $review->comment,
                 'date' => $review->created_at->diffForHumans(),

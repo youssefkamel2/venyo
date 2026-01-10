@@ -1,0 +1,47 @@
+Notification & Queue System Testing Guide
+This guide explains how to test the functionality locally and monitor the detailed logs.
+
+1. Local Testing Setup (Updated)
+To ensure scheduled jobs (like auto-cancel and reminders) triggering at the correct times, you must run the scheduler daemon.
+
+Required Terminals
+Terminal 1: Queue Worker Processes background jobs & emails.
+
+php artisan queue:work
+Terminal 2: Scheduler Daemon (IMPORTANT) Keeps the scheduler running every minute.
+
+php artisan schedule:work
+> Note: Do NOT use php artisan schedule:run manually, as it only runs once and might miss the 5-minute windows.
+
+Terminal 3 (Optional): Live Log Monitor
+
+Get-Content storage/logs/queue.log -Wait
+2. Expected Output Timing
+Every ~30 seconds: You will see [CheckFailedJobsJob] running. This confirms the system is alive.
+Every 5 minutes (e.g. 4:05, 4:10, 4:15): You will see:
+[AutoCancelPendingReservationsJob]
+[SendOwnerReservationRemindersJob]
+[CleanupExpiredLocksJob]
+If you miss the 5-minute mark (e.g. you start at 4:06), you will have to wait until 4:10 for these jobs to run.
+
+3. Deployment Checklist
+1. Configure Environment (.env)
+QUEUE_CONNECTION=database
+BROADCAST_DRIVER=pusher
+2. Set Up Supervisor
+File: /etc/supervisor/conf.d/venyo-worker.conf
+
+[program:venyo-worker]
+process_name=%(program_name)s_%(process_num)02d
+command=php /path/to/venyo/artisan queue:work --sleep=3 --tries=3 --max-time=3600
+autostart=true
+autorestart=true
+user=www-data
+numprocs=2
+redirect_stderr=true
+stdout_logfile=/path/to/venyo/storage/logs/worker.log
+3. Set Up Cron Job
+* * * * * cd /path/to/venyo && php artisan schedule:run >> /dev/null 2>&1
+4. Monitor Logs
+storage/logs/queue.log
+storage/logs/error.log

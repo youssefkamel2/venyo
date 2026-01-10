@@ -22,7 +22,7 @@ class ReviewResource extends JsonResource
             'user' => [
                 'id' => $this->user->id ?? null,
                 'name' => $this->user->name ?? null,
-                'avatar_url' => $this->user ? ($this->user->avatar_url ?? $this->user->getFirstMediaUrl('avatar')) : null,
+                'avatar_url' => $this->user?->avatar_url,
             ],
             'restaurant' => [
                 'id' => $this->restaurant->id ?? null,

@@ -13,6 +13,11 @@ class RestaurantPhoto extends Model
         'is_cover' => 'boolean',
     ];
 
+    public function getUrlAttribute(): ?string
+    {
+        return $this->photo_path ? url(\Illuminate\Support\Facades\Storage::url($this->photo_path)) : null;
+    }
+
     public function restaurant(): BelongsTo
     {
         return $this->belongsTo(Restaurant::class);

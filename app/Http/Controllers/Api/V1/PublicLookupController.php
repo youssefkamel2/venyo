@@ -17,7 +17,21 @@ class PublicLookupController extends BaseController
     public function areas(): JsonResponse
     {
         $areas = Cache::remember('public_areas', 60 * 60 * 24, function () {
-            return Area::where('is_active', true)->with('subAreas')->get();
+            return Area::where('is_active', true)
+                ->withCount([
+                    'restaurants' => function ($query) {
+                        $query->where('is_active', true)->where('is_profile_complete', true);
+                    }
+                ])
+                ->with([
+                    'subAreas' => function ($q) {
+                        $q->withCount([
+                            'restaurants' => function ($query) {
+                                $query->where('is_active', true)->where('is_profile_complete', true);
+                            }
+                        ]);
+                    }
+                ])->get();
         });
         return $this->success(AreaResource::collection($areas), 'Areas retrieved successfully');
     }
@@ -25,7 +39,12 @@ class PublicLookupController extends BaseController
     public function cuisines(): JsonResponse
     {
         $cuisines = Cache::remember('public_cuisines', 60 * 60 * 24, function () {
-            return CuisineType::where('is_active', true)->get();
+            return CuisineType::where('is_active', true)
+                ->withCount([
+                    'restaurants' => function ($query) {
+                        $query->where('is_active', true)->where('is_profile_complete', true);
+                    }
+                ])->get();
         });
         return $this->success(CuisineResource::collection($cuisines), 'Cuisine types retrieved successfully');
     }

@@ -5,7 +5,6 @@ namespace App\Console;
 use App\Jobs\AutoCancelPendingReservationsJob;
 use App\Jobs\CleanupExpiredLocksJob;
 use App\Jobs\SendOwnerReservationRemindersJob;
-use App\Jobs\SendReservationRemindersJob;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Foundation\Console\Kernel as ConsoleKernel;
 
@@ -16,29 +15,29 @@ class Kernel extends ConsoleKernel
      */
     protected function schedule(Schedule $schedule): void
     {
-        // Reservation Reminders (Check every hour, dispatched to queue)
-        $schedule->job(new SendReservationRemindersJob())
-            ->hourly()
-            ->name('reservation-reminders')
-            ->withoutOverlapping();
-
         // Owner 1-hour reminders (Check every 5 minutes, dispatched to queue)
         $schedule->job(new SendOwnerReservationRemindersJob())
-            ->everyFiveMinutes()
+            ->everyMinute()
             ->name('owner-reservation-reminders')
             ->withoutOverlapping();
 
-        // Auto-cancel abandoned reservations (Check every hour, dispatched to queue)
+        // Auto-cancel abandoned reservations (Check every 5 minutes to catch 5-min expirations)
         $schedule->job(new AutoCancelPendingReservationsJob())
-            ->hourly()
+            ->everyMinute()
             ->name('auto-cancel-reservations')
             ->withoutOverlapping();
 
         // Cleanup expired locks (Check every 5 minutes, dispatched to queue)
         $schedule->job(new CleanupExpiredLocksJob())
-            ->everyFiveMinutes()
+            ->everyMinute()
             ->name('cleanup-expired-locks')
             ->withoutOverlapping();
+
+        // Monitor Failed Jobs (Run every 30 seconds)
+        // This command runs the check, sleeps for 30s, and runs it again.
+        $schedule->command('monitor:failed-jobs')
+            ->everyMinute()
+            ->runInBackground();
 
         // Clean up old activity logs (weekly)
         $schedule->command('activitylog:clean')

@@ -31,18 +31,21 @@ class PhotoController extends BaseController
             return $this->validationError($validator->errors());
         }
 
-        $media = $restaurant->addMediaFromRequest('image')
-            ->usingFileName(bin2hex(random_bytes(16)) . '.' . $request->file('image')->getClientOriginalExtension())
-            ->toMediaCollection('photos');
+        $path = $request->file('image')->store('restaurants/' . $restaurant->id . '/photos', 'public');
 
-        if ($request->input('is_cover')) {
-            // Unset other cover photos in media if needed, 
-            // or just use custom properties
-            $media->setCustomProperty('is_cover', true);
-            $media->save();
+        $photo = $restaurant->photos()->create([
+            'photo_path' => $path,
+            'is_cover' => $request->boolean('is_cover'),
+            'sort_order' => $restaurant->photos()->count(),
+        ]);
+
+        if ($photo->is_cover) {
+            $restaurant->photos()
+                ->where('id', '!=', $photo->id)
+                ->update(['is_cover' => false]);
         }
 
-        return $this->success($media, 'Photo uploaded successfully', 201);
+        return $this->success($photo, 'Photo uploaded successfully', 201);
     }
 
     /**
@@ -55,13 +58,14 @@ class PhotoController extends BaseController
     public function destroy(int $id, Request $request): JsonResponse
     {
         $restaurant = $request->user()->restaurant;
-        $media = $restaurant->media()->find($id);
+        $photo = $restaurant->photos()->find($id);
 
-        if (!$media) {
+        if (!$photo) {
             return $this->error('Photo not found', 404);
         }
 
-        $media->delete();
+        \Illuminate\Support\Facades\Storage::disk('public')->delete($photo->photo_path);
+        $photo->delete();
 
         return $this->success(null, 'Photo deleted successfully');
     }
@@ -77,19 +81,15 @@ class PhotoController extends BaseController
     {
         $restaurant = $request->user()->restaurant;
 
-        // Reset all covers
-        $restaurant->getMedia('photos')->each(function ($media) {
-            $media->setCustomProperty('is_cover', false);
-            $media->save();
-        });
-
-        $media = $restaurant->media()->find($id);
-        if (!$media) {
+        $photo = $restaurant->photos()->find($id);
+        if (!$photo) {
             return $this->error('Photo not found', 404);
         }
 
-        $media->setCustomProperty('is_cover', true);
-        $media->save();
+        // Reset all covers
+        $restaurant->photos()->update(['is_cover' => false]);
+
+        $photo->update(['is_cover' => true]);
 
         return $this->success(null, 'Cover photo updated successfully');
     }

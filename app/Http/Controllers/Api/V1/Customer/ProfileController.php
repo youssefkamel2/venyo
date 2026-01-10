@@ -113,13 +113,19 @@ class ProfileController extends BaseController
         $user = $request->user();
 
         if ($request->hasFile('avatar')) {
-            $user->clearMediaCollection('avatar');
-            $user->addMediaFromRequest('avatar')
-                ->usingFileName(bin2hex(random_bytes(16)) . '.' . $request->file('avatar')->getClientOriginalExtension())
-                ->toMediaCollection('avatar');
+            // Delete old avatar if exists
+            if ($user->avatar_path) {
+                \Illuminate\Support\Facades\Storage::disk('public')->delete($user->avatar_path);
+            }
+
+            $path = $request->file('avatar')->store('users/' . $user->id . '/avatars', 'public');
+
+            $user->update([
+                'avatar_path' => $path
+            ]);
         }
 
-        return $this->success(new UserResource($user->fresh()), 'Avatar updated successfully');
+        return $this->success(new UserResource($user), 'Avatar updated successfully');
     }
 
     /**
@@ -128,7 +134,11 @@ class ProfileController extends BaseController
     public function deleteAvatar(Request $request): JsonResponse
     {
         $user = $request->user();
-        $user->clearMediaCollection('avatar');
+
+        if ($user->avatar_path) {
+            \Illuminate\Support\Facades\Storage::disk('public')->delete($user->avatar_path);
+            $user->update(['avatar_path' => null]);
+        }
 
         return $this->success(null, 'Avatar deleted successfully');
     }

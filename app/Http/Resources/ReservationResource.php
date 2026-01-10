@@ -14,6 +14,13 @@ class ReservationResource extends JsonResource
      */
     public function toArray(Request $request): array
     {
+        // Eager load orders with items if not already loaded
+        $orders = $this->relationLoaded('orders')
+            ? $this->orders
+            : $this->orders()->with('items.menuItem')->get();
+
+        $preorderTotal = $orders->sum('total');
+
         return [
             'id' => $this->hashed_id,
             'reservation_date' => $this->reservation_date->format('Y-m-d'),
@@ -23,6 +30,7 @@ class ReservationResource extends JsonResource
             'guests_count' => $this->guests_count,
             'occasion' => $this->occasion,
             'special_request' => $this->special_request,
+            'dietary_preferences' => $this->dietary_preferences,
             'status' => $this->status,
             'review' => $this->review ? new ReviewResource($this->review) : null,
             'has_review' => $this->review()->exists(),
@@ -36,6 +44,8 @@ class ReservationResource extends JsonResource
                 'id' => $this->timeSlot->hashed_id ?? null,
                 'start_time' => $this->timeSlot->start_time ?? null,
             ],
+            'orders' => OrderResource::collection($orders->load('items.menuItem')),
+            'preorder_total' => (float) $preorderTotal,
         ];
     }
 }

@@ -52,6 +52,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/lock-slot', [ReservationController::class, 'lockSlot']);
         Route::post('/', [ReservationController::class, 'store']);
         Route::post('/{id}/cancel', [ReservationController::class, 'cancel']);
+        Route::get('/{id}/menu', [ReservationController::class, 'getMenu']);
+        Route::post('/{id}/pre-order', [ReservationController::class, 'submitPreOrder']);
     });
 
     // Reviews

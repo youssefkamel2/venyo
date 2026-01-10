@@ -18,6 +18,7 @@ class AreaResource extends JsonResource
             'id' => $this->hashed_id,
             'name_en' => $this->name_en,
             'name_ar' => $this->name_ar,
+            'restaurants_count' => $this->restaurants_count,
             'sub_areas' => AreaResource::collection($this->whenLoaded('subAreas')),
         ];
     }

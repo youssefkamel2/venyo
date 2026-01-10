@@ -5,16 +5,15 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Spatie\MediaLibrary\HasMedia;
-use Spatie\MediaLibrary\InteractsWithMedia;
 use Spatie\Activitylog\Traits\LogsActivity;
 use Spatie\Activitylog\LogOptions;
+use Illuminate\Support\Facades\Storage;
 
 use App\Traits\HasHashedId;
 
-class Restaurant extends Model implements HasMedia
+class Restaurant extends Model
 {
-    use InteractsWithMedia, HasHashedId, LogsActivity;
+    use HasHashedId, LogsActivity;
 
     protected $fillable = [
         'owner_id',
@@ -35,15 +34,24 @@ class Restaurant extends Model implements HasMedia
         'closing_time',
         'is_reservable',
         'is_promoted',
+        'is_featured',
         'is_active',
-        'is_profile_complete'
+        'is_profile_complete',
+        'auto_accept',
+        'seating_options',
+        'rating',
+        'reviews_count'
     ];
 
     protected $casts = [
         'is_reservable' => 'boolean',
         'is_promoted' => 'boolean',
+        'is_featured' => 'boolean',
         'is_active' => 'boolean',
         'is_profile_complete' => 'boolean',
+        'auto_accept' => 'boolean',
+        'rating' => 'float',
+        'reviews_count' => 'integer'
     ];
 
     public function owner(): BelongsTo
@@ -73,7 +81,17 @@ class Restaurant extends Model implements HasMedia
 
     public function photos(): HasMany
     {
-        return $this->hasMany(RestaurantPhoto::class);
+        return $this->hasMany(RestaurantPhoto::class)->orderBy('sort_order', 'asc');
+    }
+
+    public function getCoverPhotoAttribute()
+    {
+        return $this->photos()->where('is_cover', true)->first();
+    }
+
+    public function getCoverPhotoUrlAttribute(): ?string
+    {
+        return $this->cover_photo?->url;
     }
 
     public function slots(): HasMany
@@ -111,6 +129,11 @@ class Restaurant extends Model implements HasMedia
         return $this->hasMany(Favorite::class);
     }
 
+    public function menuCategories(): HasMany
+    {
+        return $this->hasMany(MenuCategory::class);
+    }
+
     public function getActivitylogOptions(): LogOptions
     {
         return LogOptions::defaults()
@@ -129,37 +152,18 @@ class Restaurant extends Model implements HasMedia
                 'closing_time',
                 'is_reservable',
                 'is_promoted',
+                'is_featured',
                 'is_active',
-                'is_profile_complete'
+                'is_profile_complete',
+                'auto_accept',
+                'seating_options',
+                'rating',
+                'reviews_count'
             ])
             ->logOnlyDirty()
             ->dontSubmitEmptyLogs()
             ->setDescriptionForEvent(fn(string $eventName) => "Restaurant has been {$eventName}");
     }
 
-    public function registerMediaCollections(): void
-    {
-        $this->addMediaCollection('cover')
-            ->singleFile();
 
-        $this->addMediaCollection('photos');
-
-        $this->addMediaCollection('menu');
-    }
-
-    public function registerMediaConversions(\Spatie\MediaLibrary\MediaCollections\Models\Media $media = null): void
-    {
-        $this->addMediaConversion('thumb')
-            ->width(300)
-            ->height(200)
-            ->sharpen(10);
-
-        $this->addMediaConversion('medium')
-            ->width(800)
-            ->height(600);
-
-        $this->addMediaConversion('large')
-            ->width(1200)
-            ->height(800);
-    }
 }

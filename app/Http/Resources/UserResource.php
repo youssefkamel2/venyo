@@ -21,7 +21,7 @@ class UserResource extends JsonResource
             'phone' => $this->phone,
             'locale' => $this->locale,
             'is_active' => $this->is_active,
-            'avatar_url' => $this->avatar_url ?? $this->getFirstMediaUrl('avatar'),
+            'avatar_url' => $this->avatar_url,
             'important_dates' => UserDateResource::collection($this->whenLoaded('importantDates')),
         ];
     }

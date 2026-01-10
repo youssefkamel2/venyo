@@ -112,7 +112,7 @@ class ReservationService
                 'reservation_time' => TimeSlot::find($slotId)->start_time,
                 'guests_count' => $guests,
                 'status' => 'hold',
-                'locked_until' => now()->addMinutes(5),
+                'locked_until' => now()->addMinutes(10),
             ]);
         });
     }
@@ -140,9 +140,13 @@ class ReservationService
             return null;
         }
 
+        $restaurant = $reservation->restaurant;
+        $status = $restaurant->auto_accept ? 'accepted' : 'pending';
+
         $reservation->update(array_merge($details, [
             'locked_until' => null,
-            'status' => 'pending', // Keeps it pending for restaurant approval
+            'status' => $status,
+            'completed_at' => now(),
         ]));
 
         return $reservation;

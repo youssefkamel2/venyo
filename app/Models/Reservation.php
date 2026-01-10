@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Spatie\Activitylog\Traits\LogsActivity;
 use Spatie\Activitylog\LogOptions;
@@ -25,7 +26,8 @@ class Reservation extends Model
         'subscribe_newsletter',
         'status',
         'locked_until',
-        'completed_at'
+        'completed_at',
+        'dietary_preferences'
     ];
 
     protected $casts = [
@@ -60,6 +62,11 @@ class Reservation extends Model
         return $this->hasOne(CustomerReview::class);
     }
 
+    public function orders(): HasMany
+    {
+        return $this->hasMany(Order::class);
+    }
+
     public function getActivitylogOptions(): LogOptions
     {
         return LogOptions::defaults()
@@ -69,7 +76,8 @@ class Reservation extends Model
                 'reservation_time',
                 'guests_count',
                 'occasion',
-                'special_request'
+                'special_request',
+                'dietary_preferences'
             ])
             ->logOnlyDirty()
             ->dontSubmitEmptyLogs()

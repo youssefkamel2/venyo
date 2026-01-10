@@ -8,16 +8,15 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Spatie\MediaLibrary\HasMedia;
-use Spatie\MediaLibrary\InteractsWithMedia;
 use Spatie\Activitylog\Traits\LogsActivity;
 use Spatie\Activitylog\LogOptions;
+use Illuminate\Support\Facades\Storage;
 
 use App\Traits\HasHashedId;
 
-class User extends Authenticatable implements HasMedia, MustVerifyEmail
+class User extends Authenticatable implements MustVerifyEmail
 {
-    use HasApiTokens, HasFactory, Notifiable, InteractsWithMedia, HasHashedId, LogsActivity;
+    use HasApiTokens, HasFactory, Notifiable, HasHashedId, LogsActivity;
 
     /**
      * The attributes that are mass assignable.
@@ -30,6 +29,7 @@ class User extends Authenticatable implements HasMedia, MustVerifyEmail
         'phone',
         'password',
         'locale',
+        'avatar_path',
         'is_active',
     ];
 
@@ -83,21 +83,8 @@ class User extends Authenticatable implements HasMedia, MustVerifyEmail
             ->setDescriptionForEvent(fn(string $eventName) => "User has been {$eventName}");
     }
 
-    public function registerMediaCollections(): void
+    public function getAvatarUrlAttribute(): ?string
     {
-        $this->addMediaCollection('avatar')
-            ->singleFile();
-    }
-
-    public function registerMediaConversions(\Spatie\MediaLibrary\MediaCollections\Models\Media $media = null): void
-    {
-        $this->addMediaConversion('thumb')
-            ->width(150)
-            ->height(150)
-            ->sharpen(10);
-
-        $this->addMediaConversion('medium')
-            ->width(400)
-            ->height(400);
+        return $this->avatar_path ? url(Storage::url($this->avatar_path)) : null;
     }
 }

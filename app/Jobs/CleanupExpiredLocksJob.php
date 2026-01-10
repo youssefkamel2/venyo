@@ -39,17 +39,40 @@ class CleanupExpiredLocksJob implements ShouldQueue
     public function handle(): void
     {
         $traceId = LoggingService::getTraceId();
+        $startTime = microtime(true);
+        $jobName = 'CleanupExpiredLocksJob';
 
-        $cleanedCount = Reservation::where('status', 'hold')
+        $msg = "[{$jobName}] Running...";
+        echo $msg . PHP_EOL;
+        Log::channel('queue')->info($msg, ['trace_id' => $traceId]);
+
+        $expiredLocks = Reservation::where('status', 'hold')
             ->whereNotNull('locked_until')
             ->where('locked_until', '<', now())
-            ->update(['status' => 'canceled']);
+            ->get();
 
-        if ($cleanedCount > 0) {
-            Log::channel('api')->info('Cleaned up expired reservation locks', [
-                'trace_id' => $traceId,
-                'cleaned_count' => $cleanedCount,
-            ]);
+        $count = $expiredLocks->count();
+
+        if ($count > 0) {
+            foreach ($expiredLocks as $lock) {
+                $lock->update(['status' => 'canceled']);
+                Log::channel('queue')->info("[{$jobName}] Released lock for reservation #{$lock->id}", [
+                    'trace_id' => $traceId,
+                    'reservation_id' => $lock->id,
+                    'locked_until' => $lock->locked_until,
+                ]);
+            }
         }
+
+        $duration = round((microtime(true) - $startTime) * 1000, 2);
+
+        $msg = "[{$jobName}] Completed. Released: {$count}. Duration: {$duration}ms";
+        echo $msg . PHP_EOL;
+
+        Log::channel('queue')->info($msg, [
+            'trace_id' => $traceId,
+            'released_count' => $count,
+            'duration_ms' => $duration,
+        ]);
     }
 }
